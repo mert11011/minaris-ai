@@ -13,6 +13,9 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // 🌍 Correct backend endpoint (Render)
+  const BACKEND_URL = "https://minaris-ai-backend.onrender.com/analyze";
+
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
 
@@ -21,11 +24,15 @@ export default function App() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8001/analyze", {
+      const response = await fetch(BACKEND_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
       });
+
+      if (!response.ok) {
+        throw new Error(`Backend returned status ${response.status}`);
+      }
 
       const data = await response.json();
       console.log("🧠 Backend raw data:", data);
@@ -33,6 +40,7 @@ export default function App() {
       const reply =
         data.reply ||
         data.answer ||
+        data.output ||
         "⚠️ No valid response field received from backend.";
 
       setMessages((prev) => [
@@ -46,7 +54,7 @@ export default function App() {
         {
           role: "assistant" as const,
           content:
-            "⚠️ Error: could not reach backend. Ensure backend is running on port 8001.",
+            "⚠️ Error: Could not reach backend. Please ensure the backend Render URL is live.",
         },
       ]);
     } finally {
@@ -56,7 +64,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col relative">
-      {/* 🔹 Header changed: black bg + white text */}
+      {/* 🔹 Header: black bg + white text */}
       <header className="flex items-center justify-center py-6 bg-black shadow-sm border-b border-gray-900 relative">
         <h1 className="text-[17px] font-normal text-white tracking-wide">
           Minaris AI
@@ -96,7 +104,6 @@ export default function App() {
         <div className="max-w-3xl mx-auto">
           <ChatInput onSendMessage={handleSendMessage} disabled={loading} />
         </div>
-        {/* Enlarged footer credit */}
         <span className="absolute right-8 bottom-2 text-[10px] text-gray-400 italic font-light">
           by MERT TUZ
         </span>
