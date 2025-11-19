@@ -13,100 +13,93 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 🌍 Correct backend endpoint (Render)
   const BACKEND_URL = "https://minaris-ai-backend.onrender.com/analyze";
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
 
-    const newMessages = [...messages, { role: "user" as const, content: message }];
+    const newMessages = [...messages, { role: "user", content: message }];
     setMessages(newMessages);
     setLoading(true);
 
     try {
-      const response = await fetch(BACKEND_URL, {
+      const res = await fetch(BACKEND_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Backend returned status ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log("🧠 Backend raw data:", data);
-
+      const data = await res.json();
       const reply =
         data.reply ||
         data.answer ||
         data.output ||
-        "⚠️ No valid response field received from backend.";
+        "⚠️ No valid response received.";
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant" as const, content: reply },
-      ]);
-    } catch (error) {
-      console.error("🚨 Frontend fetch error:", error);
+      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+    } catch (err) {
       setMessages((prev) => [
         ...prev,
         {
-          role: "assistant" as const,
+          role: "assistant",
           content:
-            "⚠️ Error: Could not reach backend. Please ensure the backend Render URL is live.",
+            "⚠️ Error contacting backend. Please ensure server is running.",
         },
       ]);
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col relative">
-      {/* 🔹 Header: black bg + white text */}
-      <header className="flex items-center justify-center py-6 bg-black shadow-sm border-b border-gray-900 relative">
-        <h1 className="text-[17px] font-normal text-white tracking-wide">
-          Minaris AI
-        </h1>
+    <div className="min-h-screen bg-[#f6f8fc] flex flex-col">
+      {/* Header */}
+      <header className="bg-black py-5 flex justify-center shadow">
+        <h1 className="text-white text-lg tracking-wide font-normal">Minaris AI</h1>
       </header>
 
-      <main className="flex-1 flex flex-col overflow-y-auto transition-all duration-500 ease-in-out">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center flex-1 text-center text-gray-700 px-8 animate-fadeIn">
+      {/* Main Section */}
+      <main className="flex-1 flex flex-col items-center text-center px-6">
+        {messages.length === 0 && (
+          <>
             <img
               src="/assets/minaris-logo.png"
               alt="Minaris Logo"
-              className="h-20 w-auto mb-6 object-contain"
+              className="h-20 my-10"
             />
-            <p className="max-w-2xl leading-relaxed text-[16.5px] text-[#1a1f2e]">
+
+            <p className="max-w-2xl text-[16.5px] text-[#1a1f2e] leading-relaxed">
               This AI analyzes historical triage data across all Minaris programs.  
               Enter the program/client and describe what occurred for event classification —  
               or ask general triage-related questions.
             </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4 py-6 animate-fadeIn">
-            {messages.map((msg, idx) => (
-              <ChatMessage key={idx} role={msg.role} content={msg.content} />
-            ))}
-            {loading && (
-              <div className="flex justify-start px-8 text-gray-400 italic animate-pulse">
-                Analyzing triage context...
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
+          </>
         )}
+
+        <div className="w-full max-w-2xl py-6 space-y-4">
+          {messages.map((msg, idx) => (
+            <ChatMessage key={idx} role={msg.role} content={msg.content} />
+          ))}
+
+          {loading && (
+            <p className="text-gray-500 italic animate-pulse">
+              Analyzing triage context…
+            </p>
+          )}
+
+          <div ref={chatEndRef} />
+        </div>
       </main>
 
-      <footer className="border-t border-gray-200 bg-white py-6 px-8 relative">
-        <div className="max-w-3xl mx-auto">
+      {/* Footer */}
+      <footer className="bg-white border-t py-6">
+        <div className="max-w-2xl mx-auto px-6">
           <ChatInput onSendMessage={handleSendMessage} disabled={loading} />
         </div>
-        <span className="absolute right-8 bottom-2 text-[10px] text-gray-400 italic font-light">
+
+        <p className="text-center text-[10px] text-gray-400 mt-4 font-light">
           by MERT TUZ
-        </span>
+        </p>
       </footer>
     </div>
   );
