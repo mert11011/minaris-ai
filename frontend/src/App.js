@@ -1,13 +1,8 @@
 import React, { useState } from "react";
 import "./App.css";
 
-// CHANGE THIS WHEN SWITCHING BETWEEN LOCAL & PRODUCTION
-// LOCAL development:
 const API_URL = "http://localhost:8001/analyze";
-
-// PRODUCTION deployment (Render):
 // const API_URL = "https://minaris-ai-backend.onrender.com/analyze";
-
 
 function App() {
   const [input, setInput] = useState("");
@@ -29,9 +24,7 @@ function App() {
 
       const data = await res.json();
       setResponse(data.reply || "⚠️ No response received.");
-
     } catch (error) {
-      console.error(error);
       setResponse("❌ Error connecting to backend.");
     }
 
@@ -39,27 +32,40 @@ function App() {
   };
 
   return (
-    <div className="container">
-      <h1>Minaris Triage Assistant</h1>
+    <div className="app-container">
 
-      <textarea
-        placeholder="Ask a question..."
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-      />
+      <div className="header">
+        <img src="/minaris.png" alt="Minaris Logo" className="logo" />
+        <h1>Minaris AI</h1>
+        <p className="subtitle">
+          This AI analyzes historical triage data across all Minaris programs.
+          Enter the program/client and describe what occurred for event classification — 
+          or ask general triage-related questions.
+        </p>
+      </div>
 
-      <button onClick={sendMessage} disabled={loading}>
-        {loading ? "Analyzing..." : "Send"}
-      </button>
+      <div className="input-card">
+        <textarea
+          placeholder="Type your message here..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          className="input-box"
+        />
+
+        <button className="send-btn" onClick={sendMessage} disabled={loading}>
+          {loading ? "Analyzing..." : "Send"}
+        </button>
+      </div>
 
       {response && (
-        <div className="response-box">
+        <div className="response-card">
           <pre>{response}</pre>
         </div>
       )}
+
+      <footer className="footer">Built by MERT TUZ</footer>
     </div>
   );
 }
 
 export default App;
-

@@ -39,16 +39,21 @@ app.add_middleware(
 )
 
 # ---------------- LOAD KNOWLEDGE BASE ----------------
-embeddings_path = os.path.join(os.path.dirname(__file__), "../GPT knowledge files/embeddings.npy")
-texts_path = os.path.join(os.path.dirname(__file__), "../GPT knowledge files/texts.npy")
+BASE_DIR = os.path.dirname(__file__)
+EMBED_PATH = os.path.join(BASE_DIR, "../gpt_knowledge_files/embeddings.npy")
+TEXT_PATH = os.path.join(BASE_DIR, "../gpt_knowledge_files/texts.npy")
+
+embeddings = None
+texts = None
 
 try:
-    embeddings = np.load(embeddings_path)
-    texts = np.load(texts_path, allow_pickle=True)
+    embeddings = np.load(EMBED_PATH)
+    texts = np.load(TEXT_PATH, allow_pickle=True)
     print(f"✅ Loaded {len(texts)} triage records successfully.")
 except Exception as e:
-    print(f"❌ Error loading embeddings: {e}")
+    print(f"❌ Error loading embeddings/texts: {e}")
     embeddings, texts = None, None
+
 
 # ---------------- SYSTEM PROMPT ----------------
 SYSTEM_PROMPT = """
@@ -60,69 +65,68 @@ Rules:
 1. If the answer is covered by the Excel data, ground your reasoning in that context.
 2. If no relevant data exists, explicitly say:
    "This topic is not covered in the provided Excel knowledge base. Here’s a general reasoning-based answer:"
-   and then answer like ChatGPT.
-3. Be concise, factual, and clear — balance reasoning + helpful tone.
-4. Never invent or fabricate historical data.
+3. Be concise, factual, and clear.
+4. Never invent historical data.
 """
 
-# ---------------- INPUT MODEL ----------------
+
+# ---------------- REQUEST MODEL ----------------
 class Message(BaseModel):
     message: str
 
-# ---------------- UTILITY: FIND TOP CONTEXT ----------------
+
+# ---------------- UTILITY: FIND TOP SIMILAR ----------------
 def find_top_similar(query_text, top_k=3):
-    """Return most similar triage entries from embeddings."""
-    if embeddings is None or len(embeddings) == 0:
+    if embeddings is None:
         return []
+
+    # embed user query
     q_emb = client.embeddings.create(
         model="text-embedding-3-large",
         input=query_text
     ).data[0].embedding
+
+    # cosine similarities
     sims = cosine_similarity([q_emb], embeddings)[0]
     top_indices = sims.argsort()[-top_k:][::-1]
-    top_texts = [texts[i] for i in top_indices if sims[i] > 0.3]
-    return top_texts
+
+    # only include strong matches
+    return [texts[i] for i in top_indices if sims[i] > 0.30]
+
 
 # ---------------- MAIN ENDPOINT ----------------
 @app.post("/analyze")
 async def analyze(msg: Message):
-    """
-    Hybrid GPT-5 assistant:
-    - Uses Excel knowledge base if relevant context found
-    - Otherwise answers like standard ChatGPT
-    """
     try:
-        print(f"\n📩 Received message: {msg.message}")
+        print(f"\n📩 Received: {msg.message}")
 
-        # Retrieve relevant context
-        top_docs = find_top_similar(msg.message, top_k=3)
-        context = "\n\n".join(top_docs) if top_docs else ""
-        has_context = bool(top_docs)
+        # Retrieve relevant triage context
+        top_docs = find_top_similar(msg.message)
+        has_context = len(top_docs) > 0
 
         if has_context:
-            print("📖 Found relevant Excel knowledge.")
-        else:
-            print("⚠️ No Excel context found — answering generally.")
-
-        # Compose prompt
-        if has_context:
+            print("📘 Excel context FOUND")
+            context = "\n\n".join(top_docs)
             full_prompt = (
                 f"Relevant Excel knowledge:\n{context}\n\n"
                 f"User question:\n{msg.message}\n\n"
                 f"Use Excel knowledge as your main reference."
             )
         else:
+            print("⚠️ No Excel context — answering generally")
             full_prompt = (
-                f"The user asked: {msg.message}\n\n"
-                "No relevant Excel knowledge found — answer generally like ChatGPT."
+                f"No relevant Excel knowledge found.\n\n"
+                f"User question:\n{msg.message}\n\n"
+                "Answer generally like ChatGPT."
             )
 
-        # --- Try GPT-5 Reasoning ---
-        model_used = "gpt-5"
-        print("⚙️ Running GPT-5 Extended Reasoning...")
+        # ---------------- ATTEMPT GPT-5 REASONING ----------------
+        reply_text = ""
+        chosen_model = "gpt-5"
+
         try:
             response = client.responses.create(
-                model=model_used,
+                model=chosen_model,
                 reasoning={"effort": "high"},
                 input=[
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -130,54 +134,49 @@ async def analyze(msg: Message):
                 ],
                 max_output_tokens=2000,
             )
-            reply_text = response.output_text.strip() if response.output_text else ""
+            reply_text = (response.output_text or "").strip()
         except Exception as e:
-            print("❌ GPT-5 reasoning error:", e)
-            reply_text = ""
+            print("❌ GPT-5 reasoning failed →", e)
 
-        # --- Fallback GPT-5-Instant ---
+        # ---------------- FALLBACK: GPT-5-INSTANT ----------------
         if not reply_text:
-            model_used = "gpt-5-instant"
-            print("⚠️ Empty → switching to GPT-5-Instant...")
+            chosen_model = "gpt-5-instant"
+            print("➡️ Switching to GPT-5-Instant...")
             try:
                 response = client.responses.create(
-                    model=model_used,
+                    model=chosen_model,
                     input=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": full_prompt},
                     ],
                     max_output_tokens=1500,
                 )
-                reply_text = response.output_text.strip() if response.output_text else ""
+                reply_text = (response.output_text or "").strip()
             except Exception as e:
-                print("❌ GPT-5-Instant error:", e)
-                reply_text = ""
+                print("❌ GPT-5-Instant failed →", e)
 
-        # --- Final fallback GPT-4 ---
+        # ---------------- FINAL FALLBACK: GPT-4 ----------------
         if not reply_text:
-            model_used = "gpt-4-turbo"
-            print("⚠️ Retrying with GPT-4-Turbo fallback...")
-            response = client.chat.completions.create(
-                model=model_used,
+            chosen_model = "gpt-4-turbo"
+            print("➡️ Final fallback: GPT-4-Turbo")
+            res = client.chat.completions.create(
+                model=chosen_model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": full_prompt},
                 ],
+                max_tokens=1400,
                 temperature=0.3,
-                max_tokens=1500,
             )
-            reply_text = response.choices[0].message.content.strip()
+            reply_text = res.choices[0].message.content.strip()
 
-        if not reply_text:
-            reply_text = "⚠️ No valid text received from any model."
-
-        # --- Add visual indicator (red or blue circle) ---
+        # ---------------- ADD CONTEXT COLOR ----------------
         if has_context:
             reply_text = f"🔵 **Excel-based reasoning:**\n{reply_text}"
         else:
-            reply_text = f"🔴 **General reasoning (outside Excel data):**\n{reply_text}"
+            reply_text = f"🔴 **General reasoning:**\n{reply_text}"
 
-        print(f"✅ Final Reply ({model_used}):\n", reply_text)
+        print(f"✅ FINAL ({chosen_model}):\n", reply_text)
         return {"reply": reply_text}
 
     except Exception as e:
