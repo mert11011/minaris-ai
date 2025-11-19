@@ -27,7 +27,11 @@ else:
     print("✅ OPENAI_API_KEY successfully loaded.")
 
 # ---------------- CONFIG ----------------
-app = FastAPI()
+app = FastAPI(
+    title="Minaris AI Backend",
+    version="1.0",
+)
+
 client = OpenAI(api_key=api_key)
 
 app.add_middleware(
