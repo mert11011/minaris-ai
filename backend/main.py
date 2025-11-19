@@ -31,6 +31,10 @@ app = FastAPI(
     title="Minaris AI Backend",
     version="1.0",
 )
+# Health check endpoint for Render
+@app.get("/")
+def root():
+    return {"status": "ok", "docs": "/docs"}
 
 client = OpenAI(api_key=api_key)
 
