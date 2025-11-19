@@ -27,15 +27,7 @@ else:
     print("✅ OPENAI_API_KEY successfully loaded.")
 
 # ---------------- CONFIG ----------------
-app = FastAPI(
-    title="Minaris AI Backend",
-    version="1.0",
-)
-# Health check endpoint for Render
-@app.get("/")
-def root():
-    return {"status": "ok", "docs": "/docs"}
-
+app = FastAPI()
 client = OpenAI(api_key=api_key)
 
 app.add_middleware(
