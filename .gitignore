@@ -1,6 +1,28 @@
+# -------------------------
+# Environment files
+# -------------------------
 backend/.env
-.DS_Store
-gpt_knowledge_files/
-*.npy
-*.xlsx
 
+# -------------------------
+# macOS system files
+# -------------------------
+.DS_Store
+
+# -------------------------
+# Python cache
+# -------------------------
+__pycache__/
+*.pyc
+
+# -------------------------
+# Node / Frontend
+# -------------------------
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
+
+# -------------------------
+# IMPORTANT:
+# DO NOT ignore embeddings, .npy, .xlsx, or gpt_knowledge_files.
+# These must be tracked via Git LFS.
+# -------------------------
