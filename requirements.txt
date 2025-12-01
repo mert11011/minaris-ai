@@ -3,3 +3,8 @@ uvicorn
 openai
 python-dotenv
 pydantic
+numpy
+pandas
+scikit-learn
+chromadb
+openpyxl
