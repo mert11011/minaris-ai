@@ -1,9 +1,5 @@
 fastapi
 uvicorn
-streamlit
 openai
-chromadb
-pandas
 python-dotenv
-openpyxl
-scikit-learn
+pydantic
