@@ -7,9 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# --------------------------------------------
-# LOAD ENV
-# --------------------------------------------
+# --------------------------------------------------
+# LOAD ENVIRONMENT VARIABLES
+# --------------------------------------------------
 backend_env = os.path.join(os.path.dirname(__file__), ".env")
 root_env = os.path.join(os.path.dirname(__file__), "../.env")
 
@@ -21,23 +21,22 @@ elif os.path.exists(root_env):
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-# --------------------------------------------
-# FASTAPI SETUP
-# --------------------------------------------
+# --------------------------------------------------
+# FASTAPI APP + UNIVERSAL CORS (FIXES FRONTEND)
+# --------------------------------------------------
 app = FastAPI()
 
-# TEMPORARY FIX — THIS WILL MAKE FRONTEND CONNECT 100%
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # <--- THIS IS THE FIX
+    allow_origins=["*"],     # <-- FIX: allow frontend regardless of domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --------------------------------------------
-# LOAD KNOWLEDGE BASE
-# --------------------------------------------
+# --------------------------------------------------
+# LOAD KNOWLEDGE BASE FILES
+# --------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 KNOWLEDGE_DIR = os.path.join(BASE_DIR, "gpt_knowledge_files")
 
@@ -62,9 +61,9 @@ try:
 except Exception as e:
     print("⚠️ Failed to load triage Excel:", e)
 
-# --------------------------------------------
-# MATCHING FUNCTION
-# --------------------------------------------
+# --------------------------------------------------
+# SEMANTIC SEARCH FUNCTION
+# --------------------------------------------------
 def semantic_search(query, top_k=5):
     if embeddings is None or texts is None:
         return []
@@ -82,49 +81,49 @@ def semantic_search(query, top_k=5):
 
     idx = np.argsort(sim)[::-1][:top_k]
 
-    return [
-        {"text": texts[i], "score": float(sim[i])}
-        for i in idx
-    ]
+    return [{"text": texts[i], "score": float(sim[i])} for i in idx]
 
-# --------------------------------------------
+# --------------------------------------------------
 # SYSTEM PROMPT
-# --------------------------------------------
+# --------------------------------------------------
 SYSTEM_PROMPT = """
 You are the Minaris Triage Reasoning Engine.
 
 You use:
 - Semantic knowledge base
-- Triage decision rules (Deviation / NCE / Comment)
+- Triage classification rules
+- GMP logic structure
 
-Always return structured triage-style logic.
+Always produce structured, concise triage justification.
 """
 
-# --------------------------------------------
-# REQUEST BODY MODEL
-# --------------------------------------------
+# --------------------------------------------------
+# REQUEST BODY
+# --------------------------------------------------
 class Message(BaseModel):
     message: str
 
-# --------------------------------------------
+# --------------------------------------------------
 # TRIAGE LOGIC
-# --------------------------------------------
+# --------------------------------------------------
 def classify_event(user_text):
     t = user_text.lower()
+
     if any(k in t for k in ["deviation", "out of spec", "oops"]):
         return "Deviation"
     if any(k in t for k in ["nce", "near miss", "almost"]):
         return "NCE"
     if any(k in t for k in ["comment", "note", "observation"]):
         return "Comment"
+
     return "Unknown"
 
-# --------------------------------------------
-# MAIN ENDPOINT
-# --------------------------------------------
+# --------------------------------------------------
+# MAIN TRIAGE ENDPOINT
+# --------------------------------------------------
 @app.post("/analyze")
 async def analyze(msg: Message):
-    print(f"\n📩 Received: {msg.message}")
+    print(f"\n📩 Received request: {msg.message}")
 
     triage_type = classify_event(msg.message)
     matches = semantic_search(msg.message)
@@ -148,6 +147,7 @@ Provide structured triage justification.
 
     reply = ""
 
+    # Attempt full GPT-5 reasoning
     try:
         response = client.responses.create(
             model="gpt-5",
@@ -159,10 +159,10 @@ Provide structured triage justification.
             max_output_tokens=2000,
         )
         reply = (response.output_text or "").strip()
-
     except Exception as e:
         print("❌ GPT-5 reasoning failed:", e)
 
+    # Fallback: GPT-5-instant
     if not reply:
         try:
             response = client.responses.create(
@@ -180,12 +180,12 @@ Provide structured triage justification.
     return {
         "reply": reply,
         "triage_type": triage_type,
-        "matches": matches
+        "matches": matches,
     }
 
-# --------------------------------------------
+# --------------------------------------------------
 # HEALTH CHECK
-# --------------------------------------------
+# --------------------------------------------------
 @app.get("/")
 def root():
     return {"status": "Backend running with full knowledge base."}
