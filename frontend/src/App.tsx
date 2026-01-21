@@ -15,11 +15,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // --- BACKEND URL ---
+  // --- BACKEND URL (FIXED) ---
   const BACKEND_URL =
     process.env.NODE_ENV === "production"
-      ? "https://minaris-ai-backend.onrender.com/analyze"
-      : "http://localhost:8001/analyze";
+      ? "https://minaris-ai-backend.onrender.com"
+      : "http://localhost:8001";
 
   // --- AUTO-SCROLL ---
   useEffect(() => {
@@ -36,15 +36,13 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await fetch(BACKEND_URL, {
+      const res = await fetch(`${BACKEND_URL}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
       });
 
-      if (!res.ok) {
-        throw new Error(`Backend error: ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Backend error: ${res.status}`);
 
       const data = await res.json();
       const reply =
