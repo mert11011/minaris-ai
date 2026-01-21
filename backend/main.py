@@ -22,16 +22,17 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
 # --------------------------------------------------
-# FASTAPI APP + UNIVERSAL CORS (FIXES FRONTEND)
+# FASTAPI APP + UNIVERSAL CORS (REQUIRED FOR RENDER)
 # --------------------------------------------------
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],     # <-- FIX: allow frontend regardless of domain
+    allow_origins=["*"],          # Allow all origins
+    allow_origin_regex=".*",      # <-- REQUIRED FIX FOR RENDER CORS
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],          # POST, OPTIONS, etc.
+    allow_headers=["*"],          # JSON, authorization, etc.
 )
 
 # --------------------------------------------------
@@ -88,12 +89,10 @@ def semantic_search(query, top_k=5):
 # --------------------------------------------------
 SYSTEM_PROMPT = """
 You are the Minaris Triage Reasoning Engine.
-
 You use:
 - Semantic knowledge base
 - Triage classification rules
 - GMP logic structure
-
 Always produce structured, concise triage justification.
 """
 
@@ -129,7 +128,7 @@ async def analyze(msg: Message):
     matches = semantic_search(msg.message)
 
     summary_context = (
-        "\n".join([f"- ({m['score']:.2f}) {m['text']}" for m in matches])
+        "\n".join([f"- ({m['score']:.2f}) {m['text']}"] for m in matches)
         if matches else "No KB matches found."
     )
 
