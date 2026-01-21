@@ -26,9 +26,13 @@ client = OpenAI(api_key=api_key)
 # --------------------------------------------
 app = FastAPI()
 
+# IMPORTANT: FIX CORS HERE ✔️
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://minaris-frontend.onrender.com",     # your real frontend
+        "https://minaris-ai-frontend.onrender.com", # older URL in case still used
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,7 +72,6 @@ def semantic_search(query, top_k=5):
     if embeddings is None or texts is None:
         return []
 
-    # Get query embedding using GPT-5’s embedding API
     q_embed = client.embeddings.create(
         model="text-embedding-3-large",
         input=query
@@ -77,21 +80,15 @@ def semantic_search(query, top_k=5):
     q = np.array(q_embed)
     emb = np.array(embeddings)
 
-    # cosine similarity
     norms = np.linalg.norm(emb, axis=1) * np.linalg.norm(q)
     sim = np.dot(emb, q) / norms
 
-    # top matches
     idx = np.argsort(sim)[::-1][:top_k]
 
-    results = []
-    for i in idx:
-        results.append({
-            "text": texts[i],
-            "score": float(sim[i])
-        })
-
-    return results
+    return [
+        {"text": texts[i], "score": float(sim[i])}
+        for i in idx
+    ]
 
 # --------------------------------------------
 # SYSTEM PROMPT
@@ -99,16 +96,11 @@ def semantic_search(query, top_k=5):
 SYSTEM_PROMPT = """
 You are the Minaris Triage Reasoning Engine.
 
-You have access to:
-- Semantic knowledge base (Excel-derived)
-- Triage domain rules (Deviation / NCE / Comment)
+You use:
+- Semantic knowledge base
+- Triage decision rules (Deviation / NCE / Comment)
 
-Rules:
-1. If a question references GMP, QC, QA, EM, LIMA, Iovance, CAR-T, TIL, or triage events:
-   Respond using knowledge base + general reasoning.
-2. If embeddings are missing, say:
-   "Knowledge base unavailable — switching to general reasoning."
-3. ALWAYS return clear triage-style structured answers.
+Always return structured triage-style logic.
 """
 
 # --------------------------------------------
@@ -140,9 +132,11 @@ async def analyze(msg: Message):
     triage_type = classify_event(msg.message)
     matches = semantic_search(msg.message)
 
-    summary_context = "\n".join(
-        [f"- ({m['score']:.2f}) {m['text']}" for m in matches]
-    ) if matches else "No KB matches found."
+    summary_context = (
+        "\n".join([f"- ({m['score']:.2f}) {m['text']}" for m in matches])
+        if matches else
+        "No KB matches found."
+    )
 
     prompt = f"""
 Triage category: {triage_type}
@@ -153,24 +147,23 @@ Relevant knowledge base matches:
 User message:
 {msg.message}
 
-Provide a structured triage-style response.
+Provide a structured triage justification.
 """
 
     reply = ""
 
     try:
-        # reasoning-capable model
+        # GPT-5 full reasoning
         response = client.responses.create(
             model="gpt-5",
             reasoning={"effort": "medium"},
             input=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": prompt},
+                {"role": "user", "content": prompt},
             ],
             max_output_tokens=2000,
         )
         reply = (response.output_text or "").strip()
-
     except Exception as e:
         print("❌ GPT-5 reasoning failed:", e)
 
@@ -180,7 +173,7 @@ Provide a structured triage-style response.
                 model="gpt-5-instant",
                 input=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user",   "content": prompt},
+                    {"role": "user", "content": prompt},
                 ],
                 max_output_tokens=1200,
             )
