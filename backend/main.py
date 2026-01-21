@@ -26,13 +26,10 @@ client = OpenAI(api_key=api_key)
 # --------------------------------------------
 app = FastAPI()
 
-# IMPORTANT: FIX CORS HERE ✔️
+# TEMPORARY FIX — THIS WILL MAKE FRONTEND CONNECT 100%
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://minaris-frontend.onrender.com",     # your real frontend
-        "https://minaris-ai-frontend.onrender.com", # older URL in case still used
-    ],
+    allow_origins=["*"],   # <--- THIS IS THE FIX
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -113,17 +110,17 @@ class Message(BaseModel):
 # TRIAGE LOGIC
 # --------------------------------------------
 def classify_event(user_text):
-    event_text = user_text.lower()
-    if any(k in event_text for k in ["deviation", "out of spec", "oops"]):
+    t = user_text.lower()
+    if any(k in t for k in ["deviation", "out of spec", "oops"]):
         return "Deviation"
-    if any(k in event_text for k in ["nce", "near miss", "almost"]):
+    if any(k in t for k in ["nce", "near miss", "almost"]):
         return "NCE"
-    if any(k in event_text for k in ["comment", "note", "observation"]):
+    if any(k in t for k in ["comment", "note", "observation"]):
         return "Comment"
     return "Unknown"
 
 # --------------------------------------------
-# MAIN ANALYZE ENDPOINT
+# MAIN ENDPOINT
 # --------------------------------------------
 @app.post("/analyze")
 async def analyze(msg: Message):
@@ -134,26 +131,24 @@ async def analyze(msg: Message):
 
     summary_context = (
         "\n".join([f"- ({m['score']:.2f}) {m['text']}" for m in matches])
-        if matches else
-        "No KB matches found."
+        if matches else "No KB matches found."
     )
 
     prompt = f"""
 Triage category: {triage_type}
 
-Relevant knowledge base matches:
+Knowledge base matches:
 {summary_context}
 
 User message:
 {msg.message}
 
-Provide a structured triage justification.
+Provide structured triage justification.
 """
 
     reply = ""
 
     try:
-        # GPT-5 full reasoning
         response = client.responses.create(
             model="gpt-5",
             reasoning={"effort": "medium"},
@@ -164,6 +159,7 @@ Provide a structured triage justification.
             max_output_tokens=2000,
         )
         reply = (response.output_text or "").strip()
+
     except Exception as e:
         print("❌ GPT-5 reasoning failed:", e)
 
