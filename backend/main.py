@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 # --------------------------------------------------
-# LOAD ENVIRONMENT VARIABLES
+# LOAD ENV
 # --------------------------------------------------
 backend_env = os.path.join(os.path.dirname(__file__), ".env")
 root_env = os.path.join(os.path.dirname(__file__), "../.env")
@@ -22,7 +22,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
 # --------------------------------------------------
-# FASTAPI APP + WILDCARD CORS
+# FASTAPI + CORS
 # --------------------------------------------------
 app = FastAPI()
 
@@ -36,7 +36,7 @@ app.add_middleware(
 )
 
 # --------------------------------------------------
-# LOAD KNOWLEDGE BASE FILES
+# LOAD KNOWLEDGE BASE
 # --------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 KNOWLEDGE_DIR = os.path.join(BASE_DIR, "gpt_knowledge_files")
@@ -45,22 +45,21 @@ EMBEDDINGS_PATH = os.path.join(KNOWLEDGE_DIR, "embeddings.npy")
 TEXTS_PATH = os.path.join(KNOWLEDGE_DIR, "texts.npy")
 TRIAGE_XLSX = os.path.join(KNOWLEDGE_DIR, "Triage_Data.xlsx")
 
-embeddings = None
-texts = None
-triage_df = None
-
 try:
     embeddings = np.load(EMBEDDINGS_PATH)
     texts = np.load(TEXTS_PATH, allow_pickle=True)
     print("📚 Embeddings loaded.")
 except Exception as e:
-    print("⚠️ Failed to load embeddings:", e)
+    print("❌ ERROR loading embeddings:", e)
+    embeddings = None
+    texts = None
 
 try:
     triage_df = pd.read_excel(TRIAGE_XLSX)
-    print("📄 Triage Excel loaded.")
+    print("📄 Excel loaded.")
 except Exception as e:
-    print("⚠️ Failed to load triage Excel:", e)
+    print("❌ ERROR loading Excel:", e)
+    triage_df = None
 
 # --------------------------------------------------
 # SEMANTIC SEARCH
@@ -69,10 +68,14 @@ def semantic_search(query, top_k=5):
     if embeddings is None or texts is None:
         return []
 
-    q_embed = client.embeddings.create(
-        model="text-embedding-3-large",
-        input=query
-    ).data[0].embedding
+    try:
+        q_embed = client.embeddings.create(
+            model="text-embedding-3-large",
+            input=query
+        ).data[0].embedding
+    except Exception as e:
+        print("❌ Embedding API error:", e)
+        return []
 
     q = np.array(q_embed)
     emb = np.array(embeddings)
@@ -81,50 +84,40 @@ def semantic_search(query, top_k=5):
     sim = np.dot(emb, q) / norms
 
     idx = np.argsort(sim)[::-1][:top_k]
-
     return [{"text": texts[i], "score": float(sim[i])} for i in idx]
-
-# --------------------------------------------------
-# SYSTEM PROMPT
-# --------------------------------------------------
-SYSTEM_PROMPT = """
-You are the Minaris Triage Reasoning Engine.
-Use structured GMP-style logic and triage justification.
-"""
-
-# --------------------------------------------------
-# REQUEST BODY
-# --------------------------------------------------
-class Message(BaseModel):
-    message: str
 
 # --------------------------------------------------
 # TRIAGE LOGIC
 # --------------------------------------------------
-def classify_event(user_text):
-    t = user_text.lower()
+SYSTEM_PROMPT = """
+You are the Minaris Triage Reasoning Engine.
+Use GMP structure and triage reasoning.
+"""
 
+class Message(BaseModel):
+    message: str
+
+def classify_event(text):
+    t = text.lower()
     if any(k in t for k in ["deviation", "out of spec", "oops"]):
         return "Deviation"
     if any(k in t for k in ["nce", "near miss", "almost"]):
         return "NCE"
     if any(k in t for k in ["comment", "note", "observation"]):
         return "Comment"
-
     return "Unknown"
 
 # --------------------------------------------------
-# MAIN ENDPOINT
+# ANALYZE ENDPOINT
 # --------------------------------------------------
 @app.post("/analyze")
 async def analyze(msg: Message):
 
+    print("📥 Incoming request:", msg.message)
+
     triage_type = classify_event(msg.message)
     matches = semantic_search(msg.message)
 
-    # --------------------------------------------------
-    # FIXED: Previously buggy join → NOW CORRECT
-    # --------------------------------------------------
     if matches:
         summary_context = "\n".join(
             [f"- ({m['score']:.2f}) {m['text']}" for m in matches]
@@ -135,7 +128,7 @@ async def analyze(msg: Message):
     prompt = f"""
 Triage Category: {triage_type}
 
-Relevant Knowledge:
+Context:
 {summary_context}
 
 User Input:
@@ -143,8 +136,6 @@ User Input:
 
 Provide structured triage reasoning.
 """
-
-    reply = ""
 
     try:
         response = client.responses.create(
@@ -157,9 +148,11 @@ Provide structured triage reasoning.
             max_output_tokens=1500,
         )
         reply = (response.output_text or "").strip()
-
+        print("🤖 GPT-5 reply succeeded.")
     except Exception as e:
-        print("❌ GPT-5 failed:", e)
+        # 🔥 THIS PRINTS THE REAL ERROR IN RENDER LOGS
+        print("❌ GPT-5 ERROR:", e)
+        reply = None
 
     if not reply:
         reply = "⚠️ Backend error: Unable to generate response."
