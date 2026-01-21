@@ -8,28 +8,33 @@ export default function App() {
   // --- PASSWORD GATE ---
   const [password, setPassword] = useState("");
   const [authorized, setAuthorized] = useState(false);
-  const PASSWORD = "MINARIS"; // your desired password
+  const PASSWORD = "MINARIS";
 
-  // --- CHAT STATES (always declared, not conditional) ---
+  // --- CHAT STATES ---
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Scroll hook (safe)
+  // Automatically choose backend URL
+  const BACKEND_URL =
+    process.env.NODE_ENV === "production"
+      ? "https://minaris-ai-backend.onrender.com/analyze"
+      : "http://localhost:8001/analyze";
+
+  // --- AUTO SCROLL ---
   useEffect(() => {
     if (authorized) {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, authorized]);
 
-  const BACKEND_URL = "http://localhost:8001/analyze";
-
+  // --- SEND MESSAGE ---
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
     if (!authorized) return;
 
-    const userMessage: Message = { role: "user", content: message };
-    setMessages((prev) => [...prev, userMessage]);
+    const userMsg: Message = { role: "user", content: message };
+    setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
 
     try {
@@ -40,11 +45,12 @@ export default function App() {
       });
 
       const data = await res.json();
+
       const reply =
         data.reply ||
         data.answer ||
         data.output ||
-        "⚠️ No valid response received.";
+        "⚠️ No valid response received from backend.";
 
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
@@ -52,7 +58,8 @@ export default function App() {
         ...prev,
         {
           role: "assistant",
-          content: "⚠️ Error contacting backend. Please ensure server is running.",
+          content:
+            "⚠️ Error contacting backend. Please ensure the Render server is running.",
         },
       ]);
     }
@@ -90,10 +97,10 @@ export default function App() {
     );
   }
 
-  // --- MAIN CHAT APP ---
+  // --- MAIN CHAT UI ---
   return (
     <div className="min-h-screen bg-[#f6f8fc] flex flex-col">
-      
+
       <header className="bg-black py-4 flex justify-center shadow">
         <h1 className="text-white text-base tracking-wide font-normal">
           Minaris AI
@@ -110,8 +117,8 @@ export default function App() {
             />
 
             <p className="max-w-2xl text-[16.5px] text-[#1a1f2e] leading-relaxed">
-              This AI analyzes historical triage data across all Minaris programs.  
-              Enter the program/client and describe what occurred for event classification —  
+              This AI analyzes historical triage data across all Minaris programs.
+              Enter the program/client and describe what occurred for event classification —
               or ask general triage-related questions.
             </p>
           </div>
