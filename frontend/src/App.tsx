@@ -15,11 +15,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // --- BACKEND URL (FIXED) ---
-  const BACKEND_URL =
-    process.env.NODE_ENV === "production"
-      ? "https://minaris-ai-backend.onrender.com"
-      : "http://localhost:8001";
+  // --- FIXED BACKEND URL ---
+  const BACKEND_URL = "https://minaris-ai-backend.onrender.com";
 
   // --- AUTO-SCROLL ---
   useEffect(() => {
