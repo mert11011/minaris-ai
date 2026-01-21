@@ -22,7 +22,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
 # --------------------------------------------------
-# FASTAPI APP + UNIVERSAL CORS
+# FASTAPI APP + WILDCARD CORS
 # --------------------------------------------------
 app = FastAPI()
 
@@ -36,7 +36,7 @@ app.add_middleware(
 )
 
 # --------------------------------------------------
-# LOAD KNOWLEDGE BASE
+# LOAD KNOWLEDGE BASE FILES
 # --------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 KNOWLEDGE_DIR = os.path.join(BASE_DIR, "gpt_knowledge_files")
@@ -89,17 +89,17 @@ def semantic_search(query, top_k=5):
 # --------------------------------------------------
 SYSTEM_PROMPT = """
 You are the Minaris Triage Reasoning Engine.
-Use structured GMP-style logic and triage reasoning.
+Use structured GMP-style logic and triage justification.
 """
 
 # --------------------------------------------------
-# REQUEST BODY MODEL
+# REQUEST BODY
 # --------------------------------------------------
 class Message(BaseModel):
     message: str
 
 # --------------------------------------------------
-# TRIAGE CLASSIFICATION
+# TRIAGE LOGIC
 # --------------------------------------------------
 def classify_event(user_text):
     t = user_text.lower()
@@ -122,11 +122,15 @@ async def analyze(msg: Message):
     triage_type = classify_event(msg.message)
     matches = semantic_search(msg.message)
 
-    # FIXED BUG — proper join formatting
-    summary_context = (
-        "\n".join([f"- ({m['score']:.2f}) {m['text']}" for m in matches])
-        if matches else "No KB matches found."
-    )
+    # --------------------------------------------------
+    # FIXED: Previously buggy join → NOW CORRECT
+    # --------------------------------------------------
+    if matches:
+        summary_context = "\n".join(
+            [f"- ({m['score']:.2f}) {m['text']}" for m in matches]
+        )
+    else:
+        summary_context = "No KB matches found."
 
     prompt = f"""
 Triage Category: {triage_type}
