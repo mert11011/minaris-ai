@@ -22,21 +22,21 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
 # --------------------------------------------------
-# FASTAPI APP + UNIVERSAL CORS (REQUIRED FOR RENDER)
+# FASTAPI APP + UNIVERSAL CORS
 # --------------------------------------------------
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # Allow all origins
-    allow_origin_regex=".*",      # <-- REQUIRED FIX FOR RENDER CORS
+    allow_origins=["*"],
+    allow_origin_regex=".*",
     allow_credentials=True,
-    allow_methods=["*"],          # POST, OPTIONS, etc.
-    allow_headers=["*"],          # JSON, authorization, etc.
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --------------------------------------------------
-# LOAD KNOWLEDGE BASE FILES
+# LOAD KNOWLEDGE BASE
 # --------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 KNOWLEDGE_DIR = os.path.join(BASE_DIR, "gpt_knowledge_files")
@@ -52,7 +52,7 @@ triage_df = None
 try:
     embeddings = np.load(EMBEDDINGS_PATH)
     texts = np.load(TEXTS_PATH, allow_pickle=True)
-    print("📚 Embeddings loaded successfully.")
+    print("📚 Embeddings loaded.")
 except Exception as e:
     print("⚠️ Failed to load embeddings:", e)
 
@@ -63,7 +63,7 @@ except Exception as e:
     print("⚠️ Failed to load triage Excel:", e)
 
 # --------------------------------------------------
-# SEMANTIC SEARCH FUNCTION
+# SEMANTIC SEARCH
 # --------------------------------------------------
 def semantic_search(query, top_k=5):
     if embeddings is None or texts is None:
@@ -89,21 +89,17 @@ def semantic_search(query, top_k=5):
 # --------------------------------------------------
 SYSTEM_PROMPT = """
 You are the Minaris Triage Reasoning Engine.
-You use:
-- Semantic knowledge base
-- Triage classification rules
-- GMP logic structure
-Always produce structured, concise triage justification.
+Use structured GMP-style logic and triage reasoning.
 """
 
 # --------------------------------------------------
-# REQUEST BODY
+# REQUEST BODY MODEL
 # --------------------------------------------------
 class Message(BaseModel):
     message: str
 
 # --------------------------------------------------
-# TRIAGE LOGIC
+# TRIAGE CLASSIFICATION
 # --------------------------------------------------
 def classify_event(user_text):
     t = user_text.lower()
@@ -118,35 +114,34 @@ def classify_event(user_text):
     return "Unknown"
 
 # --------------------------------------------------
-# MAIN TRIAGE ENDPOINT
+# MAIN ENDPOINT
 # --------------------------------------------------
 @app.post("/analyze")
 async def analyze(msg: Message):
-    print(f"\n📩 Received request: {msg.message}")
 
     triage_type = classify_event(msg.message)
     matches = semantic_search(msg.message)
 
+    # FIXED BUG — proper join formatting
     summary_context = (
-        "\n".join([f"- ({m['score']:.2f}) {m['text']}"] for m in matches)
+        "\n".join([f"- ({m['score']:.2f}) {m['text']}" for m in matches])
         if matches else "No KB matches found."
     )
 
     prompt = f"""
-Triage category: {triage_type}
+Triage Category: {triage_type}
 
-Knowledge base matches:
+Relevant Knowledge:
 {summary_context}
 
-User message:
+User Input:
 {msg.message}
 
-Provide structured triage justification.
+Provide structured triage reasoning.
 """
 
     reply = ""
 
-    # Attempt full GPT-5 reasoning
     try:
         response = client.responses.create(
             model="gpt-5",
@@ -155,26 +150,15 @@ Provide structured triage justification.
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            max_output_tokens=2000,
+            max_output_tokens=1500,
         )
         reply = (response.output_text or "").strip()
-    except Exception as e:
-        print("❌ GPT-5 reasoning failed:", e)
 
-    # Fallback: GPT-5-instant
+    except Exception as e:
+        print("❌ GPT-5 failed:", e)
+
     if not reply:
-        try:
-            response = client.responses.create(
-                model="gpt-5-instant",
-                input=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                max_output_tokens=1200,
-            )
-            reply = (response.output_text or "").strip()
-        except:
-            reply = "⚠️ Backend error: Unable to generate response."
+        reply = "⚠️ Backend error: Unable to generate response."
 
     return {
         "reply": reply,
