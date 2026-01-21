@@ -15,8 +15,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // --- FIXED BACKEND URL ---
-  const BACKEND_URL = "https://minaris-ai-backend.onrender.com";
+  // --- FIXED BACKEND URL (FINAL WORKING VERSION) ---
+  const BACKEND_URL = "https://minaris-ai-backend.onrender.com/analyze";
 
   // --- AUTO-SCROLL ---
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/analyze`, {
+      const res = await fetch(BACKEND_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
@@ -43,7 +43,10 @@ export default function App() {
 
       const data = await res.json();
       const reply =
-        data.reply || data.answer || data.output || "⚠️ Backend returned no message.";
+        data.reply ||
+        data.answer ||
+        data.output ||
+        "⚠️ Backend returned no message.";
 
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
